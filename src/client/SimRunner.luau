@@ -8,16 +8,25 @@ local RunService = game:GetService("RunService")
 local Sim = ReplicatedStorage.Shared.Sim
 local Constants = require(Sim.Constants)
 local FixedStepper = require(Sim.FixedStepper)
+local Input = require(Sim.Input)
 local Simulation = require(Sim.Simulation)
 local Types = require(Sim.Types)
+local InputCapture = require(script.Parent.Input.InputCapture)
 
 local BIND_NAME = "Simulation"
 -- Runs just after Roblox processes input, so sampling and stepping happen before camera and render.
 local BIND_PRIORITY = Enum.RenderPriority.Input.Value + 1
 local DEBUG_INTERVAL = 1 -- seconds between debug lines
+local INPUT_LOG_SIZE = 120 -- (start) frames of local input kept for netcode and replay
 
--- Placeholder until input capture: every fighter is neutral every frame.
-local neutralInputs: Types.FrameInputs = table.create(Constants.FIGHTER_COUNT, 0)
+-- Player 1 is the local device; player 2 stays neutral until there is an opponent to drive it.
+local inputs: Types.FrameInputs = table.create(Constants.FIGHTER_COUNT, 0)
+
+-- Ring buffer of local inputs, slot = frame % INPUT_LOG_SIZE + 1.
+local inputLog: { Types.FrameInput } = {}
+for i = 1, INPUT_LOG_SIZE do
+	inputLog[i] = { frame = -1, mask = 0 }
+end
 
 local state: Types.SimState? = nil
 local running = false
@@ -30,8 +39,24 @@ local function start()
 
 	local simState = Simulation.new()
 	state = simState
+	InputCapture.start()
+
+	local lastMask = 0
 	local stepper = FixedStepper.new(function()
-		Simulation.step(simState, neutralInputs)
+		-- Sample per step, not per render tick, so each frame gets its own input.
+		local frame = simState.frame
+		local mask = InputCapture.sample()
+		local entry = inputLog[frame % INPUT_LOG_SIZE + 1]
+		entry.frame = frame
+		entry.mask = mask
+		inputs[1] = mask
+
+		if mask ~= lastMask then
+			print(`[Input] f={frame} {Input.describe(mask)}`)
+			lastMask = mask
+		end
+
+		Simulation.step(simState, inputs)
 	end)
 
 	local stepsSinceDebug = 0
@@ -53,6 +78,7 @@ local function stop()
 	end
 	running = false
 	RunService:UnbindFromRenderStep(BIND_NAME)
+	InputCapture.stop()
 end
 
 -- Read-only view for rendering; never write to the returned state.
@@ -60,8 +86,15 @@ local function getState(): Types.SimState?
 	return state
 end
 
+-- The local input sampled for a frame, or nil once it has left the log.
+local function getLoggedInput(frame: number): Types.InputMask?
+	local entry = inputLog[frame % INPUT_LOG_SIZE + 1]
+	return if entry.frame == frame then entry.mask else nil
+end
+
 return {
 	start = start,
 	stop = stop,
 	getState = getState,
+	getLoggedInput = getLoggedInput,
 }

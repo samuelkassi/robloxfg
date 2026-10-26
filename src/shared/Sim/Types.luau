@@ -8,6 +8,12 @@ export type InputMask = number
 -- One mask per fighter, indexed 1..FIGHTER_COUNT.
 export type FrameInputs = { InputMask }
 
+-- One fighter's input tagged with the frame it was sampled for.
+export type FrameInput = {
+	frame: number,
+	mask: InputMask,
+}
+
 export type FighterState = {
 	id: number,
 }
