@@ -43,15 +43,20 @@ local function toNumpad(mask: InputMask, facingRight: boolean): number
 	return 5 + x + 3 * y
 end
 
--- Numpad notation with buttons, as seen facing right, e.g. "3+1" or "5+1+2".
-local function describe(mask: InputMask): string
-	local text = tostring(toNumpad(mask, true))
+-- The buttons in a mask as "+1+2", or "" when none are pressed.
+local function describeButtons(mask: InputMask): string
+	local text = ""
 	for button, bit in BUTTONS do
 		if has(mask, bit) then
 			text ..= `+{button}`
 		end
 	end
 	return text
+end
+
+-- Numpad notation with buttons, as seen facing right, e.g. "3+1" or "5+1+2".
+local function describe(mask: InputMask): string
+	return tostring(toNumpad(mask, true)) .. describeButtons(mask)
 end
 
 return {
@@ -63,7 +68,9 @@ return {
 	B2 = B2,
 	B3 = B3,
 	B4 = B4,
+	BUTTON_BITS = B1 + B2 + B3 + B4,
 	clean = clean,
 	toNumpad = toNumpad,
+	describeButtons = describeButtons,
 	describe = describe,
 }

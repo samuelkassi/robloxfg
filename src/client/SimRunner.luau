@@ -9,7 +9,9 @@ local Sim = ReplicatedStorage.Shared.Sim
 local Constants = require(Sim.Constants)
 local FixedStepper = require(Sim.FixedStepper)
 local Input = require(Sim.Input)
+local Motions = require(Sim.Motions)
 local Simulation = require(Sim.Simulation)
+local StateIds = require(Sim.StateIds)
 local Types = require(Sim.Types)
 local Greybox = require(ReplicatedStorage.Shared.Fighters.Greybox)
 local InputCapture = require(script.Parent.Input.InputCapture)
@@ -46,6 +48,24 @@ local function start()
 	FighterView.start(simState)
 
 	local lastMask = 0
+	local lastStates = table.create(Constants.FIGHTER_COUNT, StateIds.IDLE)
+	local lastCommandFrames = table.create(Constants.FIGHTER_COUNT, -1)
+
+	-- Debug: print each fighter's state changes and newly detected motion commands.
+	local function printChanges(frame: number)
+		for i, fighter in simState.fighters do
+			if fighter.state ~= lastStates[i] then
+				print(`[State] P{i} f={frame} {StateIds.NAMES[fighter.state]}`)
+				lastStates[i] = fighter.state
+			end
+			if fighter.lastCommand ~= 0 and fighter.lastCommandFrame ~= lastCommandFrames[i] then
+				local motion = Motions.LIST[fighter.lastCommand]
+				print(`[Command] P{i} f={frame} {motion.name}{Input.describeButtons(fighter.lastCommandButtons)}`)
+				lastCommandFrames[i] = fighter.lastCommandFrame
+			end
+		end
+	end
+
 	local stepper = FixedStepper.new(function()
 		-- Sample per step, not per render tick, so each frame gets its own input.
 		local frame = simState.frame
@@ -61,6 +81,7 @@ local function start()
 		end
 
 		Simulation.step(simState, inputs)
+		printChanges(frame)
 	end)
 
 	local stepsSinceDebug = 0
@@ -76,7 +97,7 @@ local function start()
 			local p1, p2 = simState.fighters[1], simState.fighters[2]
 			print(
 				`[Sim] frame {simState.frame}  steps/s {stepsSinceDebug}  dropped {stepper.droppedFrames}`
-					.. `  p1 x={p1.x}  p2 x={p2.x}`
+					.. `  p1 ({p1.x}, {p1.z})  p2 ({p2.x}, {p2.z})`
 			)
 			stepsSinceDebug = 0
 			debugTimer -= DEBUG_INTERVAL

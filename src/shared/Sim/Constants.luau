@@ -1,5 +1,5 @@
 --!strict
--- Fixed timing and space values for the combat simulation.
+-- Fixed timing, space and input-reading values for the combat simulation.
 
 local FRAMES_PER_SECOND = 60
 
@@ -13,4 +13,17 @@ return table.freeze({
 	UNITS_PER_STUD = 1000,
 	-- (start) Distance between the fighters at round start, in units.
 	START_DISTANCE = 8000,
+
+	-- Frames of input each fighter remembers. Must cover the longest motion with full slack.
+	HISTORY_SIZE = 64,
+	-- (start) Most frames allowed between one direction of a motion and the next.
+	MOTION_SLACK = 8,
+	-- (start) Frames a button press stays usable for completing a motion.
+	BUTTON_BUFFER = 5,
+	-- (start) Most frames between the two taps of a dash (66) or backdash (44).
+	DASH_WINDOW = 10,
+	-- (start) A pure 8 or 2 released before this many frames is a tap (sidestep); held this long it is a hold.
+	TAP_WINDOW = 6,
+	-- (start) A hold that starts within this many frames after a tap of the same direction is a sidewalk.
+	SIDEWALK_WINDOW = 12,
 })
