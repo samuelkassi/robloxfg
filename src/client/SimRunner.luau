@@ -11,7 +11,10 @@ local FixedStepper = require(Sim.FixedStepper)
 local Input = require(Sim.Input)
 local Simulation = require(Sim.Simulation)
 local Types = require(Sim.Types)
+local Greybox = require(ReplicatedStorage.Shared.Fighters.Greybox)
 local InputCapture = require(script.Parent.Input.InputCapture)
+local CameraRig = require(script.Parent.Render.CameraRig)
+local FighterView = require(script.Parent.Render.FighterView)
 
 local BIND_NAME = "Simulation"
 -- Runs just after Roblox processes input, so sampling and stepping happen before camera and render.
@@ -37,9 +40,10 @@ local function start()
 	end
 	running = true
 
-	local simState = Simulation.new()
+	local simState = Simulation.new({ Greybox, Greybox })
 	state = simState
 	InputCapture.start()
+	FighterView.start(simState)
 
 	local lastMask = 0
 	local stepper = FixedStepper.new(function()
@@ -63,9 +67,17 @@ local function start()
 	local debugTimer = 0
 	RunService:BindToRenderStep(BIND_NAME, BIND_PRIORITY, function(dt: number)
 		stepsSinceDebug += FixedStepper.advance(stepper, dt)
+		-- Rendering follows the simulation: draw the latest frame after stepping, never feed back into it.
+		FighterView.update(simState)
+		CameraRig.update(simState)
+
 		debugTimer += dt
 		if debugTimer >= DEBUG_INTERVAL then
-			print(`[Sim] frame {simState.frame}  steps/s {stepsSinceDebug}  dropped {stepper.droppedFrames}`)
+			local p1, p2 = simState.fighters[1], simState.fighters[2]
+			print(
+				`[Sim] frame {simState.frame}  steps/s {stepsSinceDebug}  dropped {stepper.droppedFrames}`
+					.. `  p1 x={p1.x}  p2 x={p2.x}`
+			)
 			stepsSinceDebug = 0
 			debugTimer -= DEBUG_INTERVAL
 		end
@@ -79,6 +91,7 @@ local function stop()
 	running = false
 	RunService:UnbindFromRenderStep(BIND_NAME)
 	InputCapture.stop()
+	FighterView.stop()
 end
 
 -- Read-only view for rendering; never write to the returned state.
