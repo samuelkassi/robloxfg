@@ -1,8 +1,11 @@
 --!strict
--- Fighter movement state machine. Each frame it works out which state the input asks for, decides whether
--- the current state allows the switch (committed states only through their cancel windows), then moves.
--- Movement directions use the opponent's position from the start of the frame, so update order can't bias it.
+-- Fighter state machine. Each frame it works out which state the input asks for (an attack, else movement),
+-- decides whether the current state allows the switch (committed states only through their cancel windows),
+-- then moves. Directions use the opponent's position from the start of the frame, so update order can't bias it.
+-- Hits are resolved afterwards by Sim.Combat.
 
+local Combat = require(script.Parent.Combat)
+local Constants = require(script.Parent.Constants)
 local Geometry = require(script.Parent.Geometry)
 local Input = require(script.Parent.Input)
 local InputHistory = require(script.Parent.InputHistory)
@@ -16,9 +19,25 @@ type FighterData = Types.FighterData
 type FighterState = Types.FighterState
 type InputMask = Types.InputMask
 
+-- Free states an attack can start from. Committed states (dash, backdash, sidestep) need a cancel window
+-- that lists ATTACK; crouching moves come later, so attacks don't start from CROUCH yet.
+local ATTACK_FROM = {
+	[StateIds.IDLE] = true,
+	[StateIds.WALK_FORWARD] = true,
+	[StateIds.WALK_BACK] = true,
+	[StateIds.SIDEWALK_IN] = true,
+	[StateIds.SIDEWALK_OUT] = true,
+	[StateIds.RUN] = true,
+}
+
 -- Frames a committed state lasts, or nil for states that can change on any frame.
-local function durationOf(state: number, data: FighterData): number?
-	if state == StateIds.DASH then
+local function durationOf(fighter: FighterState, data: FighterData): number?
+	local state = fighter.state
+	if state == StateIds.ATTACK then
+		return Combat.totalFrames(data.moves[fighter.moveId])
+	elseif state == StateIds.HITSTUN or state == StateIds.BLOCKSTUN then
+		return fighter.stunLength
+	elseif state == StateIds.DASH then
 		return data.dashFrames
 	elseif state == StateIds.BACKDASH then
 		return data.backdashFrames
@@ -28,6 +47,33 @@ local function durationOf(state: number, data: FighterData): number?
 		return data.jumpFrames
 	end
 	return nil
+end
+
+-- The move an unused button press in the last BUTTON_BUFFER frames asks for, and that press's frame.
+-- Motion moves are matched before plain button moves.
+local function findAttack(fighter: FighterState, data: FighterData, frame: number): (number, number)
+	for pressFrame = frame, math.max(0, frame - Constants.BUTTON_BUFFER + 1), -1 do
+		if pressFrame <= fighter.consumedPressFrame then
+			break
+		end
+		local buttons = InputHistory.pressedAt(fighter, pressFrame)
+		if buttons ~= 0 then
+			for pass = 1, 2 do
+				for id, moveData in data.moves do
+					local wantsMotion = moveData.motion ~= nil
+					if (pass == 1) == wantsMotion and moveData.buttons == buttons then
+						if
+							not wantsMotion
+							or (fighter.lastCommand == moveData.motion and fighter.lastCommandFrame == pressFrame)
+						then
+							return id, pressFrame
+						end
+					end
+				end
+			end
+		end
+	end
+	return 0, -1
 end
 
 -- The state this frame's input asks for, highest priority first.
@@ -67,7 +113,7 @@ end
 -- Returns the state to be in this frame and whether it is a fresh entry.
 local function transition(fighter: FighterState, data: FighterData, requested: number): (number, boolean)
 	local current = fighter.state
-	local duration = durationOf(current, data)
+	local duration = durationOf(fighter, data)
 	if duration == nil or fighter.stateFrame >= duration - 1 then
 		-- Free to change; a finished committed state re-enters if asked for again (e.g. holding 9 jumps again).
 		return requested, requested ~= current or duration ~= nil
@@ -83,9 +129,15 @@ end
 local function enter(fighter: FighterState, state: number, numpad: number)
 	fighter.state = state
 	fighter.stateFrame = 0
+	fighter.moveId = 0
 	if state == StateIds.JUMP then
 		fighter.jumpDrift = if numpad == 9 then 1 elseif numpad == 7 then -1 else 0
 	end
+end
+
+local function aimAt(fighter: FighterState, opponentX: number, opponentZ: number)
+	fighter.attackDirX, fighter.attackDirZ =
+		Geometry.unitScaled(fighter.x, fighter.z, opponentX, opponentZ, Constants.DIR_SCALE)
 end
 
 -- Moves the fighter for its current state. (opponentX, opponentZ) is the opponent at the start of the frame.
@@ -133,6 +185,15 @@ local function move(fighter: FighterState, data: FighterData, opponentX: number,
 			Geometry.moveToward(fighter, opponentX, opponentZ, fighter.jumpDrift * data.jumpDriftSpeed)
 		end
 		return
+	elseif state == StateIds.ATTACK then
+		-- Homing moves keep turning toward the opponent; linear ones keep the direction they started with.
+		if data.moves[fighter.moveId].homing then
+			aimAt(fighter, opponentX, opponentZ)
+		end
+	elseif (state == StateIds.HITSTUN or state == StateIds.BLOCKSTUN) and fighter.pushbackLeft > 0 then
+		local slide = math.min(fighter.pushbackLeft, fighter.pushbackStep)
+		Geometry.moveToward(fighter, opponentX, opponentZ, -slide)
+		fighter.pushbackLeft -= slide
 	end
 	fighter.y = 0
 end
@@ -156,9 +217,22 @@ local function update(
 		fighter.runArmed = true
 	end
 
-	local nextState, entering = transition(fighter, data, requestedState(fighter, frame, numpad, tapDir))
+	-- An attack outranks movement. From a free state it must be one attacks start from; from a committed
+	-- state the cancel windows decide.
+	local attackId, pressFrame = findAttack(fighter, data, frame)
+	local canAttack = attackId ~= 0 and (ATTACK_FROM[fighter.state] or durationOf(fighter, data) ~= nil)
+	local requested = if canAttack then StateIds.ATTACK else requestedState(fighter, frame, numpad, tapDir)
+
+	local nextState, entering = transition(fighter, data, requested)
 	if entering then
 		enter(fighter, nextState, numpad)
+		if nextState == StateIds.ATTACK then
+			fighter.moveId = attackId
+			fighter.moveHit = false
+			fighter.consumedPressFrame = pressFrame
+			fighter.runArmed = false
+			aimAt(fighter, opponentX, opponentZ)
+		end
 	else
 		fighter.stateFrame += 1
 	end

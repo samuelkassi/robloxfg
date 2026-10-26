@@ -20,8 +20,54 @@ export type CancelWindow = {
 	into: { number },
 }
 
+-- A sphere placed relative to the attacker: `forward` along the attack direction, `side` to the attacker's
+-- right, `up` above the attacker's feet. Units.
+export type Hitbox = {
+	forward: number,
+	side: number,
+	up: number,
+	radius: number,
+}
+
+-- An upright capsule around the fighter's position: the segment from `bottom` to `top` above the feet,
+-- widened by `radius`. Units.
+export type Hurtbox = {
+	radius: number,
+	bottom: number,
+	top: number,
+}
+
+-- One move. Frame counts follow frame-data convention: the press is frame 1, so startup 10 ("i10") means
+-- the first active frame is frame 10. Advantage values are for a hit on the first active frame; the engine
+-- derives hitstun and blockstun from them, so hitting on a later active frame gives correspondingly more.
+export type MoveData = {
+	name: string,
+	buttons: number, -- Input button bits that must be newly pressed together
+	motion: number?, -- a Motions.LIST id the buttons must complete, or nil for a plain button move
+	justFrame: number, -- just-frame window in frames, 0 when the move has none
+	startup: number,
+	active: number,
+	recovery: number,
+	onHit: number,
+	onBlock: number,
+	onCounter: number,
+	hitLevel: number, -- CombatIds level
+	damage: number,
+	counterDamage: number,
+	counterEffect: number, -- CombatIds effect on counter hit
+	homing: boolean, -- homing moves track a sidestepping opponent; linear ones keep their start direction
+	hitPushback: number, -- units the defender slides back on hit
+	blockPushback: number,
+	hitboxes: { { Hitbox } }, -- one list per active frame
+	cancels: { CancelWindow }, -- strings and cancels; empty until strings exist
+}
+
 -- A fighter's fixed data. Never changes during a match. Distances are units, speeds are units per frame.
 export type FighterData = {
+	health: number,
+	standingHurtbox: Hurtbox,
+	crouchingHurtbox: Hurtbox,
+	moves: { MoveData }, -- a move's id is its index
 	walkForwardSpeed: number,
 	walkBackSpeed: number,
 	pushboxRadius: number,
@@ -74,6 +120,23 @@ export type FighterState = {
 	lastCommand: number,
 	lastCommandButtons: number,
 	lastCommandFrame: number, -- frame of the button press, -1 when none
+
+	health: number,
+	-- The move being performed while in ATTACK, else 0.
+	moveId: number,
+	moveHit: boolean, -- the current move has already connected (a move hits at most once)
+	-- Attack direction as a unit vector scaled by DIR_SCALE; fixed at the start of linear moves.
+	attackDirX: number,
+	attackDirZ: number,
+	-- Frame of the newest button press already used to start a move, so a buffered press is used once.
+	consumedPressFrame: number,
+	-- Length of the current HITSTUN or BLOCKSTUN.
+	stunLength: number,
+	pushbackLeft: number, -- units still to slide back
+	pushbackStep: number, -- units per frame
+	-- The last time this fighter's move connected, for debug output: frame and CombatIds result.
+	hitEventFrame: number,
+	hitEventResult: number,
 }
 
 export type SimState = {

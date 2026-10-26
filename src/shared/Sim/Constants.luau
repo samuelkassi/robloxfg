@@ -26,4 +26,9 @@ return table.freeze({
 	TAP_WINDOW = 6,
 	-- (start) A hold that starts within this many frames after a tap of the same direction is a sidewalk.
 	SIDEWALK_WINDOW = 12,
+
+	-- Unit directions are stored as whole numbers scaled by this, so 1000 means 1.0.
+	DIR_SCALE = 1000,
+	-- (start) Frames over which a move's pushback is spread.
+	PUSHBACK_FRAMES = 6,
 })

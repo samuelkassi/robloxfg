@@ -3,6 +3,7 @@
 -- No Roblox APIs, clocks or random values here: the host decides when to step and supplies the inputs.
 -- Written for exactly two fighters (FIGHTER_COUNT).
 
+local Combat = require(script.Parent.Combat)
 local Constants = require(script.Parent.Constants)
 local FighterStates = require(script.Parent.FighterStates)
 local Geometry = require(script.Parent.Geometry)
@@ -19,7 +20,7 @@ type SimState = Types.SimState
 local HASH_MULTIPLIER = 31
 local HASH_MODULUS = 2 ^ 32
 
-local function newFighter(id: number, x: number, facingRight: boolean): FighterState
+local function newFighter(id: number, data: FighterData, x: number, facingRight: boolean): FighterState
 	return {
 		id = id,
 		x = x,
@@ -41,6 +42,17 @@ local function newFighter(id: number, x: number, facingRight: boolean): FighterS
 		lastCommand = 0,
 		lastCommandButtons = 0,
 		lastCommandFrame = -1,
+		health = data.health,
+		moveId = 0,
+		moveHit = false,
+		attackDirX = if facingRight then Constants.DIR_SCALE else -Constants.DIR_SCALE,
+		attackDirZ = 0,
+		consumedPressFrame = -1,
+		stunLength = 0,
+		pushbackLeft = 0,
+		pushbackStep = 0,
+		hitEventFrame = -1,
+		hitEventResult = 0,
 	}
 end
 
@@ -49,8 +61,8 @@ local function new(roster: { FighterData }): SimState
 	return {
 		frame = 0,
 		fighters = {
-			newFighter(1, -half, true),
-			newFighter(2, Constants.START_DISTANCE - half, false),
+			newFighter(1, roster[1], -half, true),
+			newFighter(2, roster[2], Constants.START_DISTANCE - half, false),
 		},
 		sideSign = 1,
 		axisX = Constants.START_DISTANCE,
@@ -114,6 +126,19 @@ local function step(state: SimState, inputs: FrameInputs)
 		FighterStates.update(state.fighters[i], state.roster[i], frame, inputs[i], startX[other], startZ[other])
 	end
 	resolvePushboxes(state)
+
+	-- Check both fighters' hits before applying either, so trades are mutual and order can't matter.
+	local results = table.create(Constants.FIGHTER_COUNT, 0)
+	local moveIds = table.create(Constants.FIGHTER_COUNT, 0)
+	for i = 1, Constants.FIGHTER_COUNT do
+		results[i] = Combat.check(state, i, frame)
+		moveIds[i] = state.fighters[i].moveId
+	end
+	for i = 1, Constants.FIGHTER_COUNT do
+		if results[i] ~= 0 then
+			Combat.apply(state, i, results[i], moveIds[i], frame)
+		end
+	end
 	state.frame += 1
 end
 
@@ -170,6 +195,17 @@ local function checksum(state: SimState): number
 		hash = mix(hash, fighter.lastCommand)
 		hash = mix(hash, fighter.lastCommandButtons)
 		hash = mix(hash, fighter.lastCommandFrame)
+		hash = mix(hash, fighter.health)
+		hash = mix(hash, fighter.moveId)
+		hash = mix(hash, bool(fighter.moveHit))
+		hash = mix(hash, fighter.attackDirX)
+		hash = mix(hash, fighter.attackDirZ)
+		hash = mix(hash, fighter.consumedPressFrame)
+		hash = mix(hash, fighter.stunLength)
+		hash = mix(hash, fighter.pushbackLeft)
+		hash = mix(hash, fighter.pushbackStep)
+		hash = mix(hash, fighter.hitEventFrame)
+		hash = mix(hash, fighter.hitEventResult)
 		for slot = 1, Constants.HISTORY_SIZE do
 			hash = mix(hash, fighter.history[slot])
 		end

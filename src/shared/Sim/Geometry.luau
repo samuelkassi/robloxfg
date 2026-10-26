@@ -46,9 +46,20 @@ local function circle(
 	fighter.z = round(centerZ + offsetZ * radius / len)
 end
 
+-- Unit vector from (fromX, fromZ) toward (toX, toZ) as whole numbers scaled by `scale`; (scale, 0) if they coincide.
+local function unitScaled(fromX: number, fromZ: number, toX: number, toZ: number, scale: number): (number, number)
+	local dx, dz = toX - fromX, toZ - fromZ
+	local len = length(dx, dz)
+	if len == 0 then
+		return scale, 0
+	end
+	return round(dx * scale / len), round(dz * scale / len)
+end
+
 return {
 	round = round,
 	length = length,
+	unitScaled = unitScaled,
 	moveToward = moveToward,
 	circle = circle,
 }

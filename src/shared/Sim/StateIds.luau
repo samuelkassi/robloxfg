@@ -13,6 +13,9 @@ local SIDEWALK_IN = 9
 local SIDEWALK_OUT = 10
 local JUMP = 11
 local RUN = 12
+local ATTACK = 13
+local HITSTUN = 14
+local BLOCKSTUN = 15
 
 local NAMES = table.freeze({
 	[IDLE] = "IDLE",
@@ -27,6 +30,9 @@ local NAMES = table.freeze({
 	[SIDEWALK_OUT] = "SIDEWALK_OUT",
 	[JUMP] = "JUMP",
 	[RUN] = "RUN",
+	[ATTACK] = "ATTACK",
+	[HITSTUN] = "HITSTUN",
+	[BLOCKSTUN] = "BLOCKSTUN",
 })
 
 return table.freeze({
@@ -42,5 +48,8 @@ return table.freeze({
 	SIDEWALK_OUT = SIDEWALK_OUT,
 	JUMP = JUMP,
 	RUN = RUN,
+	ATTACK = ATTACK,
+	HITSTUN = HITSTUN,
+	BLOCKSTUN = BLOCKSTUN,
 	NAMES = NAMES,
 })

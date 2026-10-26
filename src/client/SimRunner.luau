@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Sim = ReplicatedStorage.Shared.Sim
+local CombatIds = require(Sim.CombatIds)
 local Constants = require(Sim.Constants)
 local FixedStepper = require(Sim.FixedStepper)
 local Input = require(Sim.Input)
@@ -17,6 +18,7 @@ local Greybox = require(ReplicatedStorage.Shared.Fighters.Greybox)
 local Bindings = require(script.Parent.Input.Bindings)
 local InputCapture = require(script.Parent.Input.InputCapture)
 local CameraRig = require(script.Parent.Render.CameraRig)
+local DebugBoxes = require(script.Parent.Render.DebugBoxes)
 local FighterView = require(script.Parent.Render.FighterView)
 
 local BIND_NAME = "Simulation"
@@ -58,14 +60,25 @@ local function start()
 		InputCapture.start(capture)
 	end
 	FighterView.start(simState)
+	DebugBoxes.start()
 
 	local lastMasks = table.create(Constants.FIGHTER_COUNT, 0)
 	local lastStates = table.create(Constants.FIGHTER_COUNT, StateIds.IDLE)
 	local lastCommandFrames = table.create(Constants.FIGHTER_COUNT, -1)
 
-	-- Debug: print each fighter's state changes and newly detected motion commands.
+	-- Debug: print hits, each fighter's state changes and newly detected motion commands.
 	local function printChanges(frame: number)
 		for i, fighter in simState.fighters do
+			if fighter.hitEventFrame == frame then
+				local other = Constants.FIGHTER_COUNT + 1 - i
+				local defender = simState.fighters[other]
+				local move = simState.roster[i].moves[fighter.moveId]
+				print(
+					`[Hit] P{i} {move and move.name or "?"} -> P{other} {CombatIds.RESULT_NAMES[fighter.hitEventResult]}`
+						.. ` f={frame} (move frame {fighter.stateFrame + 1}, stun {defender.stunLength},`
+						.. ` P{other} health {defender.health})`
+				)
+			end
 			if fighter.state ~= lastStates[i] then
 				print(`[State] P{i} f={frame} {StateIds.NAMES[fighter.state]}`)
 				lastStates[i] = fighter.state
@@ -103,7 +116,8 @@ local function start()
 	RunService:BindToRenderStep(BIND_NAME, BIND_PRIORITY, function(dt: number)
 		stepsSinceDebug += FixedStepper.advance(stepper, dt)
 		-- Rendering follows the simulation: draw the latest frame after stepping, never feed back into it.
-		FighterView.update(simState)
+		FighterView.update(simState, DebugBoxes.isEnabled())
+		DebugBoxes.update(simState)
 		CameraRig.update(simState)
 
 		debugTimer += dt
@@ -129,6 +143,7 @@ local function stop()
 		InputCapture.stop(capture)
 	end
 	FighterView.stop()
+	DebugBoxes.stop()
 end
 
 -- Read-only view for rendering; never write to the returned state.
