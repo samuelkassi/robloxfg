@@ -32,4 +32,5 @@ return table.freeze({
 	LIST = table.freeze(LIST),
 	DASH_STEPS = table.freeze({ 6, 6 }),
 	BACKDASH_STEPS = table.freeze({ 4, 4 }),
+	RUN_STEPS = table.freeze({ 6, 6, 6 }),
 })

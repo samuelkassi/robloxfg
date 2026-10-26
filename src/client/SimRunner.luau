@@ -14,6 +14,7 @@ local Simulation = require(Sim.Simulation)
 local StateIds = require(Sim.StateIds)
 local Types = require(Sim.Types)
 local Greybox = require(ReplicatedStorage.Shared.Fighters.Greybox)
+local Bindings = require(script.Parent.Input.Bindings)
 local InputCapture = require(script.Parent.Input.InputCapture)
 local CameraRig = require(script.Parent.Render.CameraRig)
 local FighterView = require(script.Parent.Render.FighterView)
@@ -24,13 +25,22 @@ local BIND_PRIORITY = Enum.RenderPriority.Input.Value + 1
 local DEBUG_INTERVAL = 1 -- seconds between debug lines
 local INPUT_LOG_SIZE = 120 -- (start) frames of local input kept for netcode and replay
 
--- Player 1 is the local device; player 2 stays neutral until there is an opponent to drive it.
+-- Both players are local for now: P1 on WASD + U/I/J/K and Gamepad1, P2 on arrows + Z/X/C/V.
+local captures: { InputCapture.Capture } = {
+	InputCapture.new(Bindings.keyboard, Enum.UserInputType.Gamepad1),
+	InputCapture.new(Bindings.keyboardAlt, nil),
+}
+
 local inputs: Types.FrameInputs = table.create(Constants.FIGHTER_COUNT, 0)
 
--- Ring buffer of local inputs, slot = frame % INPUT_LOG_SIZE + 1.
-local inputLog: { Types.FrameInput } = {}
-for i = 1, INPUT_LOG_SIZE do
-	inputLog[i] = { frame = -1, mask = 0 }
+-- Ring buffer of local inputs per player, slot = frame % INPUT_LOG_SIZE + 1.
+local inputLogs: { { Types.FrameInput } } = {}
+for player = 1, Constants.FIGHTER_COUNT do
+	local log = {}
+	for i = 1, INPUT_LOG_SIZE do
+		log[i] = { frame = -1, mask = 0 }
+	end
+	inputLogs[player] = log
 end
 
 local state: Types.SimState? = nil
@@ -44,10 +54,12 @@ local function start()
 
 	local simState = Simulation.new({ Greybox, Greybox })
 	state = simState
-	InputCapture.start()
+	for _, capture in captures do
+		InputCapture.start(capture)
+	end
 	FighterView.start(simState)
 
-	local lastMask = 0
+	local lastMasks = table.create(Constants.FIGHTER_COUNT, 0)
 	local lastStates = table.create(Constants.FIGHTER_COUNT, StateIds.IDLE)
 	local lastCommandFrames = table.create(Constants.FIGHTER_COUNT, -1)
 
@@ -69,15 +81,17 @@ local function start()
 	local stepper = FixedStepper.new(function()
 		-- Sample per step, not per render tick, so each frame gets its own input.
 		local frame = simState.frame
-		local mask = InputCapture.sample()
-		local entry = inputLog[frame % INPUT_LOG_SIZE + 1]
-		entry.frame = frame
-		entry.mask = mask
-		inputs[1] = mask
+		for player, capture in captures do
+			local mask = InputCapture.sample(capture)
+			local entry = inputLogs[player][frame % INPUT_LOG_SIZE + 1]
+			entry.frame = frame
+			entry.mask = mask
+			inputs[player] = mask
 
-		if mask ~= lastMask then
-			print(`[Input] f={frame} {Input.describe(mask)}`)
-			lastMask = mask
+			if mask ~= lastMasks[player] then
+				print(`[Input] P{player} f={frame} {Input.describe(mask)}`)
+				lastMasks[player] = mask
+			end
 		end
 
 		Simulation.step(simState, inputs)
@@ -111,7 +125,9 @@ local function stop()
 	end
 	running = false
 	RunService:UnbindFromRenderStep(BIND_NAME)
-	InputCapture.stop()
+	for _, capture in captures do
+		InputCapture.stop(capture)
+	end
 	FighterView.stop()
 end
 
@@ -120,9 +136,9 @@ local function getState(): Types.SimState?
 	return state
 end
 
--- The local input sampled for a frame, or nil once it has left the log.
-local function getLoggedInput(frame: number): Types.InputMask?
-	local entry = inputLog[frame % INPUT_LOG_SIZE + 1]
+-- A player's input sampled for a frame, or nil once it has left the log.
+local function getLoggedInput(player: number, frame: number): Types.InputMask?
+	local entry = inputLogs[player][frame % INPUT_LOG_SIZE + 1]
 	return if entry.frame == frame then entry.mask else nil
 end
 

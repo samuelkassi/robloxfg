@@ -12,6 +12,7 @@ local SIDESTEP_OUT = 8
 local SIDEWALK_IN = 9
 local SIDEWALK_OUT = 10
 local JUMP = 11
+local RUN = 12
 
 local NAMES = table.freeze({
 	[IDLE] = "IDLE",
@@ -25,6 +26,7 @@ local NAMES = table.freeze({
 	[SIDEWALK_IN] = "SIDEWALK_IN",
 	[SIDEWALK_OUT] = "SIDEWALK_OUT",
 	[JUMP] = "JUMP",
+	[RUN] = "RUN",
 })
 
 return table.freeze({
@@ -39,5 +41,6 @@ return table.freeze({
 	SIDEWALK_IN = SIDEWALK_IN,
 	SIDEWALK_OUT = SIDEWALK_OUT,
 	JUMP = JUMP,
+	RUN = RUN,
 	NAMES = NAMES,
 })

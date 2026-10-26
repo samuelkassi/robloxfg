@@ -29,6 +29,7 @@ local function newFighter(id: number, x: number, facingRight: boolean): FighterS
 		state = StateIds.IDLE,
 		stateFrame = 0,
 		jumpDrift = 0,
+		runArmed = false,
 		history = InputHistory.create(),
 		pendingDir = 0,
 		pendingFrames = 0,
@@ -158,6 +159,7 @@ local function checksum(state: SimState): number
 		hash = mix(hash, fighter.state)
 		hash = mix(hash, fighter.stateFrame)
 		hash = mix(hash, fighter.jumpDrift)
+		hash = mix(hash, bool(fighter.runArmed))
 		hash = mix(hash, fighter.pendingDir)
 		hash = mix(hash, fighter.pendingFrames)
 		hash = mix(hash, bool(fighter.pendingAfterTap))

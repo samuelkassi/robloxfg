@@ -32,7 +32,9 @@ end
 
 -- The state this frame's input asks for, highest priority first.
 local function requestedState(fighter: FighterState, frame: number, numpad: number, tapDir: number): number
-	if MotionParser.dashTapped(fighter, frame, Motions.DASH_STEPS) then
+	if fighter.runArmed then
+		return StateIds.RUN
+	elseif MotionParser.dashTapped(fighter, frame, Motions.DASH_STEPS) then
 		return StateIds.DASH
 	elseif MotionParser.dashTapped(fighter, frame, Motions.BACKDASH_STEPS) then
 		return StateIds.BACKDASH
@@ -91,6 +93,10 @@ local function move(fighter: FighterState, data: FighterData, opponentX: number,
 	local state = fighter.state
 	if state == StateIds.WALK_FORWARD then
 		Geometry.moveToward(fighter, opponentX, opponentZ, data.walkForwardSpeed)
+	elseif state == StateIds.RUN then
+		local accelFrames = math.min(fighter.stateFrame, data.runAccelFrames)
+		local speed = data.runStartSpeed + (data.runMaxSpeed - data.runStartSpeed) * accelFrames // data.runAccelFrames
+		Geometry.moveToward(fighter, opponentX, opponentZ, speed)
 	elseif state == StateIds.WALK_BACK then
 		Geometry.moveToward(fighter, opponentX, opponentZ, -data.walkBackSpeed)
 	elseif state == StateIds.DASH then
@@ -143,6 +149,12 @@ local function update(
 	local numpad = Input.toNumpad(mask, fighter.facingRight)
 	local tapDir = Intent.update(fighter, numpad, InputHistory.numpadAt(fighter, frame - 1))
 	MotionParser.updateCommand(fighter, frame)
+	-- Run: the third tap of 666 arms it, and it stays armed only while forward is held.
+	if numpad ~= 6 then
+		fighter.runArmed = false
+	elseif MotionParser.dashTapped(fighter, frame, Motions.RUN_STEPS) then
+		fighter.runArmed = true
+	end
 
 	local nextState, entering = transition(fighter, data, requestedState(fighter, frame, numpad, tapDir))
 	if entering then

@@ -14,6 +14,18 @@ local keyboard: { [Enum.KeyCode]: number } = {
 	[Enum.KeyCode.K] = Input.B4,
 }
 
+-- Second keyboard set. For now it drives player 2 so both fighters can be played on one keyboard.
+local keyboardAlt: { [Enum.KeyCode]: number } = {
+	[Enum.KeyCode.Up] = Input.UP,
+	[Enum.KeyCode.Left] = Input.LEFT,
+	[Enum.KeyCode.Down] = Input.DOWN,
+	[Enum.KeyCode.Right] = Input.RIGHT,
+	[Enum.KeyCode.Z] = Input.B1,
+	[Enum.KeyCode.X] = Input.B2,
+	[Enum.KeyCode.C] = Input.B3,
+	[Enum.KeyCode.V] = Input.B4,
+}
+
 -- Tekken layout: X/Y are punches, A/B are kicks.
 local gamepad: { [Enum.KeyCode]: number } = {
 	[Enum.KeyCode.DPadUp] = Input.UP,
@@ -28,6 +40,7 @@ local gamepad: { [Enum.KeyCode]: number } = {
 
 return {
 	keyboard = keyboard,
+	keyboardAlt = keyboardAlt,
 	gamepad = gamepad,
 	-- (start) How far the left stick must tilt, in any direction, before it counts as one of 8 directions.
 	stickDeadzone = 0.5,

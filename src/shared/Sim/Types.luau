@@ -37,6 +37,10 @@ export type FighterData = {
 	jumpFrames: number,
 	jumpHeight: number,
 	jumpDriftSpeed: number,
+	-- Run starts at runStartSpeed and reaches runMaxSpeed after runAccelFrames.
+	runStartSpeed: number,
+	runMaxSpeed: number,
+	runAccelFrames: number,
 	-- Keyed by StateIds of committed states (dash, backdash, sidestep).
 	cancels: { [number]: CancelWindow },
 }
@@ -51,6 +55,8 @@ export type FighterState = {
 	state: number, -- a StateIds value
 	stateFrame: number, -- frames spent in the current state, 0 on entry
 	jumpDrift: number, -- -1 back, 0 straight up, 1 forward, for the current jump
+	-- Set by the third tap of 666 and kept while 6 is held, so the run starts as soon as the dash can cancel.
+	runArmed: boolean,
 
 	-- Raw input masks, slot = frame % HISTORY_SIZE + 1.
 	history: { InputMask },

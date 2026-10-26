@@ -32,10 +32,19 @@ local data: Types.FighterData = table.freeze({
 	jumpFrames = 40,
 	jumpHeight = 2500,
 	jumpDriftSpeed = 40,
+	runStartSpeed = 80,
+	runMaxSpeed = 130, -- about 7.8 studs/s
+	runAccelFrames = 20,
 	cancels = table.freeze({
 		[StateIds.DASH] = table.freeze({
 			fromFrame = 4,
-			into = table.freeze({ StateIds.CROUCH, StateIds.BACKDASH, StateIds.SIDESTEP_IN, StateIds.SIDESTEP_OUT }),
+			into = table.freeze({
+				StateIds.CROUCH,
+				StateIds.BACKDASH,
+				StateIds.SIDESTEP_IN,
+				StateIds.SIDESTEP_OUT,
+				StateIds.RUN,
+			}),
 		}),
 		-- Crouch cancel from frame 6 is what makes the Korean backdash (4, 4, 1, 4, 4, 1...) work.
 		[StateIds.BACKDASH] = table.freeze({

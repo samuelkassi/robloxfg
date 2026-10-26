@@ -1,13 +1,13 @@
 --!strict
--- Turns keyboard and Gamepad1 events into one input mask per simulation frame.
--- Held state comes from events; presses are latched until the next sample so sub-frame taps still count.
+-- Turns one player's keyboard keys (and optionally a gamepad) into one input mask per simulation frame.
+-- Create one capture per local player. Held state comes from events; presses are latched until the next
+-- sample so sub-frame taps still count.
 
 local UserInputService = game:GetService("UserInputService")
 
 local Input = require(game:GetService("ReplicatedStorage").Shared.Sim.Input)
 local Bindings = require(script.Parent.Bindings)
 
-local GAMEPAD = Enum.UserInputType.Gamepad1
 local SECTOR_ANGLE = math.pi / 4
 
 -- 45-degree stick sectors counter-clockwise from right. Equal sectors leave no neutral gap between directions.
@@ -22,15 +22,30 @@ local STICK_SECTORS = {
 	[7] = Input.DOWN + Input.RIGHT,
 }
 
-local heldBits: { [Enum.KeyCode]: number } = {}
-local stickMask = 0
-local latched = 0
-local connections: { RBXScriptConnection } = {}
+export type Capture = {
+	keyboard: { [Enum.KeyCode]: number },
+	gamepad: Enum.UserInputType?, -- e.g. Gamepad1, or nil for keyboard only
+	heldBits: { [Enum.KeyCode]: number },
+	stickMask: number,
+	latched: number,
+	connections: { RBXScriptConnection },
+}
 
-local function bitFor(input: InputObject): number?
+local function new(keyboard: { [Enum.KeyCode]: number }, gamepad: Enum.UserInputType?): Capture
+	return {
+		keyboard = keyboard,
+		gamepad = gamepad,
+		heldBits = {},
+		stickMask = 0,
+		latched = 0,
+		connections = {},
+	}
+end
+
+local function bitFor(capture: Capture, input: InputObject): number?
 	if input.UserInputType == Enum.UserInputType.Keyboard then
-		return Bindings.keyboard[input.KeyCode]
-	elseif input.UserInputType == GAMEPAD then
+		return capture.keyboard[input.KeyCode]
+	elseif capture.gamepad and input.UserInputType == capture.gamepad then
 		return Bindings.gamepad[input.KeyCode]
 	end
 	return nil
@@ -45,65 +60,84 @@ local function stickToMask(position: Vector3): number
 	return STICK_SECTORS[sector]
 end
 
-local function clear()
-	table.clear(heldBits)
-	stickMask = 0
-	latched = 0
-end
-
-local function onInputBegan(input: InputObject, gameProcessed: boolean)
-	if gameProcessed then
-		return
-	end
-	local bit = bitFor(input)
-	if bit then
-		heldBits[input.KeyCode] = bit
-		latched = bit32.bor(latched, bit)
-	end
-end
-
-local function onInputEnded(input: InputObject)
-	heldBits[input.KeyCode] = nil
-end
-
-local function onInputChanged(input: InputObject)
-	if input.UserInputType == GAMEPAD and input.KeyCode == Enum.KeyCode.Thumbstick1 then
-		stickMask = stickToMask(input.Position)
-		latched = bit32.bor(latched, stickMask)
-	end
+local function clear(capture: Capture)
+	table.clear(capture.heldBits)
+	capture.stickMask = 0
+	capture.latched = 0
 end
 
 -- Returns this frame's mask and clears the press latch. Call once per simulation step.
-local function sample(): number
-	local mask = bit32.bor(latched, stickMask)
-	for _, bit in heldBits do
+local function sample(capture: Capture): number
+	local mask = bit32.bor(capture.latched, capture.stickMask)
+	for _, bit in capture.heldBits do
 		mask = bit32.bor(mask, bit)
 	end
-	latched = 0
+	capture.latched = 0
 	return Input.clean(mask)
 end
 
-local function start()
-	if #connections > 0 then
+local function start(capture: Capture)
+	if #capture.connections > 0 then
 		return
 	end
-	table.insert(connections, UserInputService.InputBegan:Connect(onInputBegan))
-	table.insert(connections, UserInputService.InputEnded:Connect(onInputEnded))
-	table.insert(connections, UserInputService.InputChanged:Connect(onInputChanged))
+	local connections = capture.connections
+	table.insert(
+		connections,
+		UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+			if gameProcessed then
+				return
+			end
+			local bit = bitFor(capture, input)
+			if bit then
+				capture.heldBits[input.KeyCode] = bit
+				capture.latched = bit32.bor(capture.latched, bit)
+			end
+		end)
+	)
+	table.insert(
+		connections,
+		UserInputService.InputEnded:Connect(function(input: InputObject)
+			capture.heldBits[input.KeyCode] = nil
+		end)
+	)
+	table.insert(
+		connections,
+		UserInputService.InputChanged:Connect(function(input: InputObject)
+			if
+				capture.gamepad
+				and input.UserInputType == capture.gamepad
+				and input.KeyCode == Enum.KeyCode.Thumbstick1
+			then
+				capture.stickMask = stickToMask(input.Position)
+				capture.latched = bit32.bor(capture.latched, capture.stickMask)
+			end
+		end)
+	)
 	-- Releases are missed while the window is unfocused, so drop everything to avoid stuck keys.
-	table.insert(connections, UserInputService.WindowFocusReleased:Connect(clear))
-	table.insert(connections, UserInputService.GamepadDisconnected:Connect(clear))
+	table.insert(
+		connections,
+		UserInputService.WindowFocusReleased:Connect(function()
+			clear(capture)
+		end)
+	)
+	table.insert(
+		connections,
+		UserInputService.GamepadDisconnected:Connect(function()
+			clear(capture)
+		end)
+	)
 end
 
-local function stop()
-	for _, connection in connections do
+local function stop(capture: Capture)
+	for _, connection in capture.connections do
 		connection:Disconnect()
 	end
-	table.clear(connections)
-	clear()
+	table.clear(capture.connections)
+	clear(capture)
 end
 
 return {
+	new = new,
 	start = start,
 	stop = stop,
 	sample = sample,
