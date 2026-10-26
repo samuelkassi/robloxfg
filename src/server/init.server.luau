@@ -1,1 +1,5 @@
-print("Hello world, from server!")
+--!strict
+
+local Points = require(script.Points)
+
+Points.start()

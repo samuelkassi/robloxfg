@@ -48,6 +48,32 @@
             512
           ]
         }
+      },
+      "PointPart": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "CanCollide": false,
+          "Color": [
+            0.2,
+            0.8,
+            0.3
+          ],
+          "Material": "Neon",
+          "Position": [
+            0,
+            2,
+            -20
+          ],
+          "Size": [
+            4,
+            4,
+            4
+          ],
+          "Tags": [
+            "PointPart"
+          ]
+        }
       }
     },
     "Lighting": {
